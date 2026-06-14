@@ -1,0 +1,20 @@
+[project]
+name = "mcp-baf-audit"
+version = "0.1.0"
+description = "Shared JSONL audit log for BAF MCP services (mcp-baf, baf-write-mcp, hermes)"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "andriy4k07" }]
+requires-python = ">=3.11"
+# Без рантайм-зависимостей: только стандартная библиотека.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_baf_audit"]
