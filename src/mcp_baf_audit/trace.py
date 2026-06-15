@@ -59,10 +59,14 @@ async def traced(
     исключения. args — компактная выжимка аргументов для журнала; полные
     payload'ы пишут доменные события.
 
-    trace_id берётся в приоритете: явный аргумент -> contextvar -> None.
+    trace_id берётся в приоритете: явный аргумент -> contextvar -> новый.
+    Он никогда не None: если ни явного, ни унаследованного нет, генерируется
+    новый. Выбранный trace_id фиксируется в contextvar (set_trace_id), чтобы
+    вложенные и последующие события того же контекста наследовали его.
     """
     if trace_id is None:
-        trace_id = get_trace_id()
+        trace_id = get_trace_id() or new_trace_id()
+    set_trace_id(trace_id)
 
     start = time.monotonic()
     try:

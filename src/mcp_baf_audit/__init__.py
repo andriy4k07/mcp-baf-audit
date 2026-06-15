@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+from . import events
+from .events import ALIASES, canonical
+from .reader import iter_events
 from .redact import REDACTED, default_redactor
 from .trace import (
     get_trace_id,
@@ -25,7 +28,7 @@ from .writer import (
     user_cache_dir,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "AuditWriter",
@@ -37,6 +40,10 @@ __all__ = [
     "new_trace_id",
     "default_redactor",
     "REDACTED",
+    "events",
+    "canonical",
+    "ALIASES",
+    "iter_events",
     "SCHEMA_VERSION",
     "DEFAULT_AUDIT_MAX_SIZE_MIB",
     "DEFAULT_AUDIT_ARCHIVES",

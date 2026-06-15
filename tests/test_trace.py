@@ -47,13 +47,14 @@ def test_traced_logs_tool_call_with_duration(tmp_path):
     assert json.loads(out) == {"types": []}
 
     ev = last_event(tmp_path)
-    assert ev["event"] == "tool_call"
+    assert ev["event"] == "tool.call"  # каноническое имя (из "tool_call")
     assert ev["tool"] == "metadata"
     assert ev["args"] == {"a": 1}
     assert ev["ok"] is True
     assert isinstance(ev["duration_ms"], int)
     assert ev["service"] == "mcp-baf"
-    assert ev["trace_id"] is None
+    # trace_id никогда не None: без явного/унаследованного он генерируется.
+    assert ev["trace_id"]
 
 
 def test_traced_picks_request_id_from_result(tmp_path):
@@ -74,7 +75,7 @@ def test_traced_marks_error_result_not_ok(tmp_path):
 
     asyncio.run(traced(w, "create", call))
     ev = last_event(tmp_path)
-    assert ev["event"] == "tool_call"
+    assert ev["event"] == "tool.call"
     assert ev["ok"] is False
 
 
@@ -88,7 +89,7 @@ def test_traced_logs_tool_error_on_exception(tmp_path):
         asyncio.run(traced(w, "validate", call, request_id="req-1"))
 
     ev = last_event(tmp_path)
-    assert ev["event"] == "tool_error"
+    assert ev["event"] == "tool.error"
     assert ev["level"] == "error"
     assert ev["tool"] == "validate"
     assert ev["request_id"] == "req-1"
@@ -115,3 +116,42 @@ def test_traced_picks_trace_id_from_contextvar(tmp_path):
 
     asyncio.run(traced(w, "query", call))
     assert last_event(tmp_path)["trace_id"] == "ctx-trace"
+
+
+def test_traced_generates_trace_id_when_absent(tmp_path):
+    w = make_writer(tmp_path)
+    seen = {}
+
+    async def call():
+        # Внутри вызова trace_id уже зафиксирован в contextvar.
+        seen["ctx"] = get_trace_id()
+        return {"ok": True}
+
+    asyncio.run(traced(w, "query", call))
+    tid = last_event(tmp_path)["trace_id"]
+    assert tid  # не None и не пусто
+    # Сгенерированный trace_id виден вложенному коду через contextvar.
+    assert seen["ctx"] == tid
+
+
+def test_traced_series_shares_single_trace_id(tmp_path):
+    """Серия вызовов без явного trace_id наследует один не-null trace_id."""
+    w = make_writer(tmp_path)
+
+    async def call():
+        return {"ok": True}
+
+    async def series():
+        # Вызовы в одном контексте (включая read-only) делят trace_id.
+        await traced(w, "metadata", call)
+        await traced(w, "query", call)
+        await traced(w, "validate", call)
+
+    asyncio.run(series())
+
+    lines = (tmp_path / "audit.log").read_text("utf-8").splitlines()
+    trace_ids = {json.loads(line)["trace_id"] for line in lines}
+    assert len(lines) == 3
+    assert len(trace_ids) == 1
+    assert None not in trace_ids
+    assert next(iter(trace_ids))  # не пусто
