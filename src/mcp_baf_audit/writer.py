@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from .events import canonical
 from .redact import default_redactor
 from .trace import get_trace_id
 
@@ -33,7 +34,11 @@ logger = logging.getLogger(__name__)
 
 # Версия схемы записи. Любое изменение формата строки -> bump этой
 # константы и minor/major тега пакета.
-SCHEMA_VERSION = "1"
+#
+# v2: добавлены optional-поля конверта (request_id, object, actor,
+# source_channel, ok) к уже имевшимся (level, duration_ms, status). Все
+# nullable; их отсутствие в строке (например, в логах v1) не ломает чтение.
+SCHEMA_VERSION = "2"
 
 _MIB = 1 << 20
 
@@ -121,12 +126,30 @@ class AuditWriter:
         level: str = "info",
         tool: str | None = None,
         trace_id: str | None = None,
+        request_id: str | None = None,
+        obj: dict[str, Any] | None = None,
+        actor: str | None = None,
+        source_channel: str | None = None,
+        ok: bool | None = None,
         duration_ms: int | None = None,
         status: int | None = None,
         payload: dict[str, Any] | None = None,
         error: str | None = None,
     ) -> None:
-        """Пишет запись по единой схеме (payload — событие-специфичное)."""
+        """Пишет запись по единой схеме v2 (payload — событие-специфичное).
+
+        Optional-поля конверта nullable и пишутся всегда (None, если не
+        заданы), чтобы схема была самоописательной:
+
+        * request_id — доменный идентификатор операции;
+        * obj — затронутый объект 1С {type, ref, code, name} (поле "object");
+        * actor — кто инициировал (пользователь/сервис);
+        * source_channel — канал обращения (mcp, http, cli, …);
+        * ok — итог операции (успех/ошибка);
+        * duration_ms, status — длительность и HTTP-статус.
+
+        Редакция секретов применяется и к payload, и к object.
+        """
         record: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "ts": _utc_now_iso_ms(),
@@ -134,9 +157,14 @@ class AuditWriter:
             "session": self._session,
             "seq": 0,  # проставляется под локом в _emit
             "trace_id": trace_id if trace_id is not None else get_trace_id(),
-            "event": event,
+            "event": canonical(event),
             "level": level,
             "tool": tool,
+            "request_id": request_id,
+            "object": self._redactor(obj) if obj else None,
+            "actor": actor,
+            "source_channel": source_channel,
+            "ok": ok,
             "duration_ms": duration_ms,
             "status": status,
             "payload": self._redactor(payload) if payload else {},
@@ -168,7 +196,7 @@ class AuditWriter:
             "session": self._session,
             "seq": 0,  # проставляется под локом в _emit
             "trace_id": trace_id if trace_id is not None else get_trace_id(),
-            "event": event,
+            "event": canonical(event),
             "level": level,
         }
         if request_id:
