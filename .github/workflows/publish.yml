@@ -1,0 +1,38 @@
+name: Publish to PyPI
+
+# Релиз публикуется при пуше тега vX.Y.Z. Аутентификация — Trusted Publishing
+# (OIDC), без токенов: PyPI доверяет именно этому workflow в этом репозитории.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/mcp-baf-audit/
+    permissions:
+      id-token: write  # обязательно для OIDC Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sanity check — tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(uv version --short)"
+          echo "tag=$tag package=$pkg"
+          test "$tag" = "$pkg" || { echo "::error::tag $tag != version $pkg"; exit 1; }
+
+      - name: Run tests
+        run: uv run --extra dev pytest -q
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Publish to PyPI (trusted publishing)
+        run: uv publish
