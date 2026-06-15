@@ -1,6 +1,6 @@
 [project]
 name = "mcp-baf-audit"
-version = "0.2.0"
+version = "0.2.1"
 description = "Shared JSONL audit log for BAF MCP services (mcp-baf, baf-write-mcp, hermes)"
 readme = "README.md"
 license = "MIT"
